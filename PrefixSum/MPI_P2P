@@ -1,0 +1,195 @@
+/* Name: Brijesh Mavani
+CWID: A20406960
+University: Illinois Institute of Technology
+Course: Parallel and Distributed Processing
+Assignment: 3   */
+
+/* Prefix Sum using MPI Point to Point communication*/
+
+#include<stdio.h>
+#include<stdlib.h>
+#include<string.h>
+#include<mpi.h>
+
+
+#define MAXZ 100000000
+long int Array_Size;
+long int arr[MAXZ],chunk[MAXZ];
+//int arrout[MAXZ];
+long int sum =0,total_sum = 0, tempsum=0,i=0;
+//int j = 0;
+double starttime, endtime,ptime,totaltime; 
+
+/* Set the program parameters from the command-line arguments */
+void parameters(int argc, char **argv) 
+{
+	 /* Read command-line arguments */
+	Array_Size = atoi(argv[1]);
+//	printf("Array Size in parameter: %d \n", Array_Size); // Included for code debugging.
+}
+
+void initialize_inputs()
+{
+//	printf("Array Size: %d in input init \n", Array_Size); // Included for code debugging.
+	for (i = 0; i < Array_Size; i++)
+	{
+		arr[i] = rand() % 10;
+		total_sum += arr[i];
+//		arrout[i] = 0;
+	}
+
+}
+
+/* Print input matrices */
+void print_inputs()
+{
+	printf("Input: ");
+	for (i = 0; i < Array_Size; i++)
+	{
+		printf(" %ld", arr[i]);
+	}
+	printf("\nTotal Input Sum: %ld \n", total_sum);
+}
+
+int main(int argc, char *argv[])
+{
+	int procid,nproc;
+
+	/* Process program parameters */
+	parameters(argc, argv);
+
+	/* Initialize MPI */
+
+	if (MPI_Init(&argc, &argv) != MPI_SUCCESS)
+	{
+		fprintf(stderr, "Unable to initialize MPI!\n");
+		return -1;
+	}
+
+	MPI_Comm_rank(MPI_COMM_WORLD, &procid);
+	MPI_Comm_size(MPI_COMM_WORLD, &nproc);
+	
+
+	if (Array_Size % nproc != 0)
+	{
+		fprintf(stderr, "Array size must be multiple of no of processes.\n");
+		return -1;
+	}
+
+	/* Initialize Input and print when process id is 0*/
+	if (procid==0)
+	{
+		initialize_inputs();
+		print_inputs();
+	}
+	/* Print input matrices 
+	if (procid==0)
+	{
+		print_inputs();
+	}
+	*/
+
+	MPI_Status status;
+	long int * chunk = (long int *)malloc(sizeof(long int) *Array_Size/nproc); 
+ 
+	/* Start Clock */
+	printf("\nStarting clock for process: %d.\n",procid);
+	printf("Rank: %d  Size: %d \n", procid, nproc);
+	
+	if (procid==0)
+		{
+			starttime = MPI_Wtime();
+		}
+/* scatter the array in chunks of equal number of elements to other processes*/
+  
+	MPI_Scatter(arr,Array_Size/nproc,MPI_LONG,chunk,Array_Size/nproc,MPI_LONG,0,MPI_COMM_WORLD);
+	
+	long int ArrayIndex = 1;
+//	j= procid*(Array_Size/nproc);
+	if (procid!=0)
+		{
+			starttime = MPI_Wtime();
+		}
+	for (i = 0; i < Array_Size / nproc; i++)
+	{
+		sum += chunk[i];  // Calculate the partial sum at each process.
+//		arrout[j+i] = sum; // Not required as we do not need to print output of each process.
+	}
+	MPI_Barrier(MPI_COMM_WORLD);
+	while(ArrayIndex <= nproc/2)
+	{
+//		printf("Array Index in While start: %d \n",ArrayIndex); // Included for code debugging.
+		if((procid+1) % ArrayIndex != 0)
+		{	
+			//Do nothing;
+		}
+		else
+		{
+//			printf("1st if: %d rank: %d \n",(procid+1) % ArrayIndex,procid); // Included for code debugging.
+			if(procid/ArrayIndex % 2 != 0)
+			{
+				MPI_Recv(&tempsum, 1, MPI_LONG, procid-ArrayIndex,0,MPI_COMM_WORLD,&status);
+				sum += tempsum;
+//				printf("inner if: %d \n",procid/ArrayIndex % 2); // Included for code debugging.
+
+				/* Not required as we do not need to print output of each process.
+				printf("Output of send rank %d : \n",procid);
+
+				for (i = 0; i < Array_Size / nproc; i++)
+				{
+					//arrout[j+i] += temp; 
+					printf(" %d",arrout[j+i]);
+				}
+				printf("\n");
+				*/
+			}
+			else
+			{
+				MPI_Send(&sum, 1, MPI_LONG, procid+ArrayIndex,0,MPI_COMM_WORLD);
+				/* Not required as we do not need to print output of each process.				
+				printf("Output of receive rank %d :\n",procid);
+				for (i = 0; i < Array_Size / nproc; i++)
+				{
+					arrout[j+i] += tempsum;
+					printf(" %d",arrout[j+i]);
+				}
+				printf("\n");
+				*/
+			}
+
+		}
+		ArrayIndex = 2 * ArrayIndex;
+		MPI_Barrier(MPI_COMM_WORLD);
+	}	
+	endtime =MPI_Wtime();
+	ptime= endtime-starttime;
+	printf("Process time for rank: %d is: %f seconds\n",procid,ptime);
+	MPI_Barrier(MPI_COMM_WORLD);
+	/*Not required as we do not need to print output of each process.
+	for (i = 0; i < nproc; i++)
+	{
+  		if (procid==i)
+		{
+			printf("\nOutput of rank %d: ",procid);
+			
+			for (int k=0;k< Array_Size / nproc; k++)
+			{
+				printf(" %d", arrout[j+k]);
+			}
+		printf("\n");
+		}
+	}
+	*/	
+	if(procid ==nproc-1)
+	{
+		printf("Prefix sum of given input is: %ld\n",sum);
+	}	
+	MPI_Reduce(&ptime,&totaltime,1, MPI_DOUBLE, MPI_SUM,0, MPI_COMM_WORLD);
+	if(procid == 0)
+	{
+		printf("Total elapsed time is: %f seconds.\n",totaltime);
+	}
+	free(chunk);
+	MPI_Finalize();
+	return 0;
+}
